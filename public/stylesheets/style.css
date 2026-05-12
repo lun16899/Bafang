@@ -1,0 +1,72 @@
+body {
+  padding: 110px 30px 30px 30px; /* top padding to avoid brand overlap */
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+  background: #fff7f6;
+}
+
+a {
+  color: #d13b3b;
+}
+
+/* Red / Yellow theme */
+:root{
+  --primary:#d13b3b; /* red */
+  --accent:#ffcf3f;  /* yellow */
+  --muted:#f6e9d6;
+  --text:#222;
+}
+
+.card{
+  background: white;
+  border-radius:8px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.06);
+  padding:18px;
+  margin-bottom:18px;
+}
+
+.title {
+  color:var(--primary);
+  font-size:20px;
+  margin:0 0 12px 0;
+}
+
+.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.form-row input{flex:1;padding:10px;border:1px solid #e6d9d9;border-radius:6px}
+.btn{
+  background:var(--primary);color:white;padding:10px 16px;border-radius:18px;border:none;cursor:pointer
+}
+.btn.secondary{background:var(--accent);color:#222}
+
+.filters{display:flex;gap:8px;align-items:center;margin:12px 0}
+
+table.custom-table{width:100%;border-collapse:collapse}
+table.custom-table th, table.custom-table td{border:1px solid #eee;padding:10px;text-align:left}
+table.custom-table thead th{background:linear-gradient(90deg,var(--primary),#b62d2d);color:white}
+table.custom-table tbody tr:nth-child(odd){background:var(--muted)}
+
+@media (max-width:700px){
+  .form-row{flex-direction:column}
+  .filters{flex-direction:column;align-items:stretch}
+}
+
+.actions button{margin-right:6px}
+
+/* Brand (top-left) */
+.brand{position:fixed;top:14px;left:18px;z-index:1200;display:block;backdrop-filter: blur(4px)}
+.brand img{height:72px;width:auto;display:block;background:rgba(255,255,255,0.9);padding:8px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,0.08)}
+
+@media (max-width:700px){
+  .brand img{height:56px}
+}
+
+/* Center content and limit width for harmonious layout */
+.card{max-width:980px;margin-left:auto;margin-right:auto}
+
+/* Chart wrapper: limit height and center */
+.chart-card .chart-wrap{max-width:760px;margin:6px auto 0;height:140px}
+.chart-card .chart-wrap canvas{width:100%;height:100%;display:block}
+
+/* Smaller footprint on small screens */
+@media (max-width:700px){
+  .chart-card .chart-wrap{height:120px}
+}

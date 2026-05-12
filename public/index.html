@@ -1,0 +1,235 @@
+<html>
+<head>
+  <title>八方雲集-歷年價格</title>
+  <link rel="stylesheet" href="/stylesheets/style.css">
+</head>
+<body>
+  <header class="brand" aria-label="品牌標誌">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <img src="/images/brand.svg" alt="品牌">
+  </header>
+  <div class="card">
+    <h1 class="title">新增歷年價格</h1>
+    <div class="form-row">
+      <input type="text" id="date" placeholder="例如：2026-01">
+      <input type="text" id="product" placeholder="商品名稱，例如：招牌鍋貼">
+      <input type="number" id="unit_price" step="0.1" placeholder="單價，例如：6.3">
+      <button class="btn" id="submitBtn">送出</button>
+    </div>
+    <div id="result"></div>
+    <p id="serverMsg" style="white-space:pre-wrap"></p>
+  </div>
+
+  <div class="card chart-card">
+    <h2 class="title">價格走勢</h2>
+    <div class="form-row">
+      <label for="chartProduct">商品：</label>
+      <select id="chartProduct"></select>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="priceChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="title">歷年價格</h2>
+    <div class="filters">
+      <input id="filterDate" placeholder="篩選日期 (YYYY 或 YYYY-MM)">
+      <input id="filterProduct" placeholder="篩選商品">
+      <input id="filterMaxPrice" type="number" placeholder="單價小於等於">
+      <button class="btn secondary" id="applyFilters">執行篩選</button>
+      <button class="btn" id="clearFilters">清除篩選</button>
+    </div>
+    <div id="quotesContainer">
+      <table class="custom-table" id="quotesTable">
+        <thead>
+          <tr id="quotesHead"></tr>
+        </thead>
+        <tbody id="quotesBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // helpers
+    function normalizeDateInput(v) {
+      if (!v) return '';
+      v = v.trim();
+      if (/^\d{4}年$/.test(v)) v = v.replace('年', '');
+      if (/^\d{4}$/.test(v)) v = v + '-01';
+      if (/^\d{4}-\d{1}$/.test(v)) v = v.replace(/-(\d)$/, (m, p1) => '-' + p1.padStart(2, '0'));
+      return v;
+    }
+
+    // submit new row
+    document.getElementById('submitBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const resDiv = document.getElementById('result');
+      const serverP = document.getElementById('serverMsg');
+      resDiv.textContent = '';
+      serverP.textContent = '';
+
+      let date = document.getElementById('date').value; date = normalizeDateInput(date);
+      const product = document.getElementById('product').value.trim();
+      const unit_price = document.getElementById('unit_price').value;
+
+      if (!date) return resDiv.textContent = '日期為必填';
+      if (!/^\d{4}-\d{2}$/.test(date)) return resDiv.textContent = '日期格式錯誤，請使用 YYYY 或 YYYY-MM';
+      if (!product) return resDiv.textContent = '商品為必填';
+      if (unit_price === '' || Number.isNaN(Number(unit_price))) return resDiv.textContent = '單價為數字';
+
+      try {
+        const params = new URLSearchParams({ date, product, unit_price });
+        const resp = await fetch('/api/insert?' + params.toString());
+        const data = await resp.json();
+        if (resp.ok) {
+          resDiv.textContent = '新增成功';
+          serverP.textContent = JSON.stringify(data, null, 2);
+          loadQuotes();
+        } else {
+          resDiv.textContent = '新增失敗';
+          serverP.textContent = JSON.stringify(data, null, 2);
+        }
+      } catch (err) {
+        resDiv.textContent = 'Network error';
+        serverP.textContent = err.message;
+      }
+    });
+
+    // filters
+    document.getElementById('applyFilters').addEventListener('click', () => loadQuotes());
+    document.getElementById('clearFilters').addEventListener('click', () => {
+      document.getElementById('filterDate').value = '';
+      document.getElementById('filterProduct').value = '';
+      document.getElementById('filterMaxPrice').value = '';
+      loadQuotes();
+    });
+
+    // load and render
+    async function loadQuotes() {
+      const head = document.getElementById('quotesHead');
+      const body = document.getElementById('quotesBody');
+      head.innerHTML = '';
+      body.innerHTML = '';
+
+      let rows = [];
+      try {
+        const resp = await fetch('/api/quotes');
+        const data = await resp.json();
+        rows = data.rows || [];
+          window._allRows = rows;
+          // update product selector and chart immediately
+          if (typeof buildProductOptions === 'function') buildProductOptions(rows);
+          if (typeof updateChart === 'function') updateChart(rows);
+      } catch (e) {
+        body.innerHTML = '<tr><td colspan="4">無法載入資料</td></tr>';
+        return;
+      }
+
+      // client-side filtering
+      const fDate = (document.getElementById('filterDate').value || '').trim();
+      const fProd = (document.getElementById('filterProduct').value || '').trim();
+      const fMax = document.getElementById('filterMaxPrice').value;
+      const filtered = rows.filter(r => {
+        if (fDate) {
+          if (fDate.length === 4) { if (!r.date.startsWith(fDate)) return false; }
+          else if (!r.date.startsWith(fDate)) return false;
+        }
+        if (fProd) if (!String(r.product).includes(fProd)) return false;
+        if (fMax) if (Number(r.unit_price) > Number(fMax)) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        body.innerHTML = '<tr><td colspan="4">無資料</td></tr>';
+        return;
+      }
+
+      // headers
+      const cols = ['date', 'product', 'unit_price'];
+      const headerNames = { date: '年份', product: '商品', unit_price: '單價' };
+      for (const c of cols) {
+        const th = document.createElement('th'); th.textContent = headerNames[c] || c; head.appendChild(th);
+      }
+      const actTh = document.createElement('th'); actTh.textContent = '操作'; head.appendChild(actTh);
+
+      // rows
+      for (const r of filtered) {
+        const tr = document.createElement('tr');
+        for (const c of cols) {
+          const td = document.createElement('td'); td.textContent = r[c]; tr.appendChild(td);
+        }
+        const actTd = document.createElement('td');
+        const editBtn = document.createElement('button'); editBtn.textContent = '編輯';
+        editBtn.addEventListener('click', async () => {
+          const newDate = prompt('日期 (YYYY-MM):', r.date) || r.date;
+          const newProduct = prompt('商品:', r.product) || r.product;
+          const newPrice = prompt('單價:', r.unit_price) || r.unit_price;
+          try {
+            const resp = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, date: newDate, product: newProduct, unit_price: newPrice }) });
+            const data = await resp.json();
+            if (resp.ok) loadQuotes(); else alert('更新錯誤: '+(data.error||JSON.stringify(data)));
+          } catch (e) { alert('Network error: '+e.message); }
+        });
+        const delBtn = document.createElement('button'); delBtn.textContent = '刪除';
+        delBtn.addEventListener('click', async () => {
+          if (!confirm('確定要刪除此列？')) return; try { const resp = await fetch('/api/delete?id='+encodeURIComponent(r.id)); const data = await resp.json(); if (resp.ok) loadQuotes(); else alert('刪除錯誤: '+(data.error||JSON.stringify(data))); } catch(e){alert('Network error: '+e.message)}
+        });
+        actTd.appendChild(editBtn); actTd.appendChild(document.createTextNode(' ')); actTd.appendChild(delBtn);
+        tr.appendChild(actTd); body.appendChild(tr);
+      }
+    }
+
+    // Chart logic
+    let priceChart = null;
+    function buildProductOptions(rows) {
+      const sel = document.getElementById('chartProduct');
+      const products = Array.from(new Set(rows.map(r => r.product))).sort();
+        const prev = sel.value || '';
+        sel.innerHTML = '<option value="">全部商品</option>' + products.map(p => `<option value="${p}">${p}</option>`).join('');
+        sel.value = prev;
+        sel.onchange = () => updateChart(window._allRows || []);
+    }
+
+    function updateChart(rows) {
+      const sel = document.getElementById('chartProduct');
+      const product = sel.value;
+      const filtered = product ? rows.filter(r => r.product === product) : rows;
+      // aggregate by date
+      const map = new Map();
+      filtered.forEach(r => {
+        const d = r.date;
+        if (!map.has(d)) map.set(d, { sum: 0, count: 0 });
+        const obj = map.get(d);
+        obj.sum += Number(r.unit_price);
+        obj.count += 1;
+      });
+      const labels = Array.from(map.keys()).sort();
+      const data = labels.map(l => +(map.get(l).sum / map.get(l).count).toFixed(2));
+
+      const ctx = document.getElementById('priceChart').getContext('2d');
+      if (priceChart) {
+        priceChart.data.labels = labels;
+        priceChart.data.datasets[0].data = data;
+        priceChart.update();
+      } else {
+        priceChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{ label: '平均單價', data, borderColor: 'rgba(209,59,59,0.9)', backgroundColor: 'rgba(255,207,63,0.15)', fill: true, tension: 0.25 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: '日期' } }, y: { title: { display: true, text: '單價' } } } }
+        });
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadQuotes();
+      const rows = window._allRows || [];
+      buildProductOptions(rows);
+      updateChart(rows);
+    });
+  </script>
+</body>
+</html>
